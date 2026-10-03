@@ -77,9 +77,11 @@ data class VideoClip(
     val speed: Float = 1.0f,
     val volume: Float = 1.0f,
     val isMuted: Boolean = false,
+    val isVideo: Boolean = true,
     val colorAdjustment: ColorAdjustment = ColorAdjustment(),
     val transform: Transform = Transform(),
-    val thumbnailResId: Int? = null
+    val thumbnailResId: Int? = null,
+    val thumbnailPath: String? = null
 ) {
     val effectiveDurationMs: Long
         get() = ((trimEndMs - trimStartMs).coerceAtLeast(100L) / speed).toLong()
@@ -188,6 +190,7 @@ data class Project(
     val stickerLayers: List<StickerLayer> = emptyList(),
     val exportSettings: ExportSettings = ExportSettings(),
     val thumbnailUri: String? = null,
+    val thumbnailPath: String? = null,
     val previewDrawableResId: Int? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val modifiedAt: Long = System.currentTimeMillis()
@@ -198,4 +201,28 @@ data class Project(
             val audioDuration = audioClips.maxOfOrNull { it.startTimelineMs + it.effectiveDurationMs } ?: 0L
             return maxOf(videoDuration, audioDuration, 1000L)
         }
+
+    fun getActiveClipInfo(positionMs: Long): ActiveClipInfo? {
+        if (clips.isEmpty()) return null
+        var acc = 0L
+        for (i in clips.indices) {
+            val clip = clips[i]
+            val dur = clip.effectiveDurationMs
+            if (positionMs in acc until (acc + dur)) {
+                return ActiveClipInfo(i, clip, acc, positionMs - acc)
+            }
+            acc += dur
+        }
+        val lastIdx = clips.size - 1
+        val lastClip = clips[lastIdx]
+        val lastStart = (acc - lastClip.effectiveDurationMs).coerceAtLeast(0L)
+        return ActiveClipInfo(lastIdx, lastClip, lastStart, (positionMs - lastStart).coerceAtLeast(0L))
+    }
 }
+
+data class ActiveClipInfo(
+    val clipIndex: Int,
+    val clip: VideoClip,
+    val clipStartInProjectMs: Long,
+    val localOffsetMs: Long
+)

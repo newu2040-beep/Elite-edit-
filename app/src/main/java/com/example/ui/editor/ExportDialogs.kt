@@ -47,6 +47,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.content.Intent
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.FileProvider
+import java.io.File
 import com.example.data.model.ExportBitrate
 import com.example.data.model.ExportCodec
 import com.example.data.model.ExportResolution
@@ -340,6 +344,8 @@ fun ExportCompleteScreen(
     onShare: () -> Unit,
     onBackToHome: () -> Unit
 ) {
+    val context = LocalContext.current
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -387,21 +393,60 @@ fun ExportCompleteScreen(
 
             // Primary View Button
             Button(
-                onClick = onViewVideo,
+                onClick = {
+                    try {
+                        val file = File(outputPath)
+                        if (file.exists()) {
+                            val uri = FileProvider.getUriForFile(
+                                context,
+                                "${context.packageName}.fileprovider",
+                                file
+                            )
+                            val intent = Intent(Intent.ACTION_VIEW).apply {
+                                setDataAndType(uri, "video/mp4")
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            context.startActivity(intent)
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                    onViewVideo()
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(50.dp),
                 shape = RoundedCornerShape(25.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = ElitePrimary)
             ) {
-                Text(text = "View", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                Text(text = "View Video", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
             }
 
             Spacer(modifier = Modifier.height(12.dp))
 
             // Secondary Share Button
             OutlinedButton(
-                onClick = onShare,
+                onClick = {
+                    try {
+                        val file = File(outputPath)
+                        if (file.exists()) {
+                            val uri = FileProvider.getUriForFile(
+                                context,
+                                "${context.packageName}.fileprovider",
+                                file
+                            )
+                            val intent = Intent(Intent.ACTION_SEND).apply {
+                                type = "video/mp4"
+                                putExtra(Intent.EXTRA_STREAM, uri)
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            context.startActivity(Intent.createChooser(intent, "Share Exported Video"))
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                    onShare()
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(50.dp),

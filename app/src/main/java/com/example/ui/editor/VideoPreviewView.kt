@@ -1,22 +1,30 @@
 package com.example.ui.editor
 
+import androidx.annotation.OptIn
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -33,15 +41,21 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.R
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.AspectRatioFrameLayout
+import androidx.media3.ui.PlayerView
+import coil.compose.rememberAsyncImagePainter
+import coil.request.ImageRequest
 import com.example.data.model.ColorAdjustment
 import com.example.data.model.Project
 import com.example.data.model.StickerLayer
@@ -50,42 +64,52 @@ import com.example.ui.icons.EliteIcons
 import com.example.ui.theme.EliteBorderDark
 import com.example.ui.theme.EliteCardDark
 import com.example.ui.theme.ElitePrimary
+import com.example.ui.theme.ElitePrimaryLight
 import com.example.ui.theme.EliteTextPrimary
 import com.example.ui.theme.EliteTextSecondary
+import java.io.File
 import java.util.Locale
 import kotlin.math.roundToInt
 
+@OptIn(UnstableApi::class)
 @Composable
 fun VideoPreviewView(
     project: Project,
     currentPositionMs: Long,
     isPlaying: Boolean,
     showBeforeAfter: Boolean,
+    exoPlayer: ExoPlayer?,
     onTogglePlayPause: () -> Unit,
     modifier: Modifier = Modifier,
     onSelectTextLayer: (String?) -> Unit = {},
-    onSelectStickerLayer: (String?) -> Unit = {}
+    onSelectStickerLayer: (String?) -> Unit = {},
+    onAddClipClicked: () -> Unit = {}
 ) {
-    val activeClip = project.clips.firstOrNull()
+    val context = LocalContext.current
+    val activeInfo = project.getActiveClipInfo(currentPositionMs)
+    val activeClip = activeInfo?.clip ?: project.clips.firstOrNull()
     val adjustment = if (showBeforeAfter) ColorAdjustment() else (activeClip?.colorAdjustment ?: ColorAdjustment())
 
-    // Build color matrix representing real-time color grading
-    val colorFilter = remember(adjustment) {
+    // Real-time color matrix for live color adjustments
+    val colorFilter = remember(adjustment, showBeforeAfter) {
+        if (showBeforeAfter) return@remember null
         val cm = ColorMatrix()
-        // Brightness & Exposure:
         val brightnessShift = (adjustment.brightness * 100f) + (adjustment.exposure * 80f)
         val contrastScale = (1.0f + adjustment.contrast).coerceIn(0.2f, 3.0f)
         val satScale = (1.0f + adjustment.saturation).coerceIn(0.0f, 3.0f)
 
         cm.setToSaturation(satScale)
 
-        // Apply contrast & brightness
         val t = (1.0f - contrastScale) * 128f + brightnessShift
+        val tempR = adjustment.temperature * 30f
+        val tempB = -adjustment.temperature * 30f
+        val tintG = adjustment.tint * 25f
+
         val contrastMatrix = ColorMatrix(
             floatArrayOf(
-                contrastScale, 0f, 0f, 0f, t,
-                0f, contrastScale, 0f, 0f, t,
-                0f, 0f, contrastScale, 0f, t,
+                contrastScale, 0f, 0f, 0f, t + tempR,
+                0f, contrastScale, 0f, 0f, t + tintG,
+                0f, 0f, contrastScale, 0f, t + tempB,
                 0f, 0f, 0f, 1f, 0f
             )
         )
@@ -99,7 +123,6 @@ fun VideoPreviewView(
             .padding(horizontal = 16.dp, vertical = 8.dp),
         contentAlignment = Alignment.Center
     ) {
-        // Container with Project Aspect Ratio
         BoxWithConstraints(
             modifier = Modifier
                 .aspectRatio(project.aspectRatio.ratio)
@@ -111,15 +134,62 @@ fun VideoPreviewView(
             val previewWidth = maxWidth
             val previewHeight = maxHeight
 
-            // Video preview frame
-            val previewRes = activeClip?.thumbnailResId ?: project.previewDrawableResId ?: R.drawable.img_city_vibes
-            Image(
-                painter = painterResource(id = previewRes),
-                contentDescription = "Video Preview",
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop,
-                colorFilter = colorFilter
-            )
+            if (activeClip != null) {
+                if (activeClip.isVideo && exoPlayer != null) {
+                    // REAL EXOPLAYER SURFACE VIEW
+                    AndroidView(
+                        factory = { ctx ->
+                            PlayerView(ctx).apply {
+                                player = exoPlayer
+                                useController = false
+                                resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                            }
+                        },
+                        update = { playerView ->
+                            playerView.player = exoPlayer
+                        },
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    // REAL PHOTO IMAGE RENDERING
+                    val file = File(activeClip.uri)
+                    val model = if (file.exists()) file else activeClip.uri
+                    Image(
+                        painter = rememberAsyncImagePainter(
+                            model = ImageRequest.Builder(context)
+                                .data(model)
+                                .crossfade(true)
+                                .build()
+                        ),
+                        contentDescription = "Photo Clip",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop,
+                        colorFilter = colorFilter
+                    )
+                }
+            } else {
+                // Empty state prompting to import
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(24.dp)
+                ) {
+                    Text(
+                        text = "No Video Clips Added",
+                        color = EliteTextSecondary,
+                        fontSize = 14.sp
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Button(
+                        onClick = onAddClipClicked,
+                        colors = ButtonDefaults.buttonColors(containerColor = ElitePrimary),
+                        shape = RoundedCornerShape(20.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.Add, contentDescription = "Add", tint = Color.White)
+                        Spacer(modifier = Modifier.size(6.dp))
+                        Text("Add Video or Photo", color = Color.White, fontSize = 13.sp)
+                    }
+                }
+            }
 
             // Before / After Indicator Badge
             if (showBeforeAfter) {
@@ -127,7 +197,7 @@ fun VideoPreviewView(
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .padding(12.dp)
-                        .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(6.dp))
+                        .background(Color.Black.copy(alpha = 0.75f), RoundedCornerShape(6.dp))
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
                     Text(
@@ -164,11 +234,10 @@ fun VideoPreviewView(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .background(Color.Black.copy(alpha = 0.55f))
+                    .background(Color.Black.copy(alpha = 0.65f))
                     .padding(horizontal = 12.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Timecode: e.g. 00:08 / 00:24
                 val currentSec = currentPositionMs / 1000L
                 val totalSec = project.totalDurationMs / 1000L
                 val timeString = String.format(
@@ -191,7 +260,7 @@ fun VideoPreviewView(
                     modifier = Modifier
                         .size(36.dp)
                         .clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.15f))
+                        .background(Color.White.copy(alpha = 0.2f))
                         .testTag("preview_play_pause_button")
                 ) {
                     Icon(

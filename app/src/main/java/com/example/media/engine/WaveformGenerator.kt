@@ -3,26 +3,40 @@ package com.example.media.engine
 import com.example.media.native.NativeMediaBridge
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlin.random.Random
+import java.io.File
+import kotlin.math.abs
 
 object WaveformGenerator {
     suspend fun generateWaveform(sampleCount: Int = 40): List<Float> = withContext(Dispatchers.Default) {
-        val dummyPcm = ShortArray(1024) { 
-            (kotlin.math.sin(it * 0.1) * 20000 + Random.nextInt(-4000, 4000)).toInt().toShort() 
-        }
-        val nativeResult = NativeMediaBridge.extractWaveform(dummyPcm, sampleCount)
+        val pcm = ShortArray(1024) { (it % 100).toShort() }
+        val nativeResult = NativeMediaBridge.extractWaveform(pcm, sampleCount)
         if (nativeResult != null && nativeResult.isNotEmpty()) {
             nativeResult.toList()
         } else {
-            // Smooth waveform generator
-            val list = mutableListOf<Float>()
-            var prev = 0.5f
+            List(sampleCount) { 0.4f }
+        }
+    }
+
+    suspend fun generateFromFile(file: File, sampleCount: Int = 40): List<Float> = withContext(Dispatchers.IO) {
+        if (!file.exists() || file.length() == 0L) {
+            return@withContext List(sampleCount) { 0.3f }
+        }
+        try {
+            val bytes = file.readBytes()
+            val step = maxOf(1, bytes.size / sampleCount)
+            val result = mutableListOf<Float>()
             for (i in 0 until sampleCount) {
-                val next = (prev + (Random.nextFloat() - 0.5f) * 0.4f).coerceIn(0.15f, 0.95f)
-                list.add(next)
-                prev = next
+                val idx = i * step
+                if (idx < bytes.size) {
+                    val sample = abs(bytes[idx].toInt()) / 128.0f
+                    result.add(sample.coerceIn(0.15f, 0.95f))
+                } else {
+                    result.add(0.3f)
+                }
             }
-            list
+            result
+        } catch (e: Exception) {
+            List(sampleCount) { 0.4f }
         }
     }
 }

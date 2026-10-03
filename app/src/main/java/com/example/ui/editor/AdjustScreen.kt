@@ -75,14 +75,15 @@ fun AdjustScreen(
     showBeforeAfter: Boolean,
     onToggleBeforeAfter: () -> Unit,
     onApplyAdjustment: (ColorAdjustment) -> Unit,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     var workingAdjustment by remember { mutableStateOf(currentAdjustment) }
     var selectedTab by remember { mutableStateOf(AdjustCategoryTab.ADJUST) }
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
+        modifier = modifier
+            .fillMaxWidth()
             .background(EliteSurfaceDark)
             .navigationBarsPadding()
     ) {
@@ -189,24 +190,38 @@ fun AdjustScreen(
                 AdjustCategoryTab.PRESETS -> PresetsTab(
                     activePreset = workingAdjustment.activePreset,
                     onSelectPreset = { preset, adj ->
-                        workingAdjustment = adj.copy(activePreset = preset)
+                        val updated = adj.copy(activePreset = preset)
+                        workingAdjustment = updated
+                        onApplyAdjustment(updated)
                     }
                 )
                 AdjustCategoryTab.ADJUST -> SlidersTab(
                     adjustment = workingAdjustment,
-                    onAdjustmentChange = { workingAdjustment = it }
+                    onAdjustmentChange = {
+                        workingAdjustment = it
+                        onApplyAdjustment(it)
+                    }
                 )
                 AdjustCategoryTab.HSL -> HslTab(
                     adjustment = workingAdjustment,
-                    onAdjustmentChange = { workingAdjustment = it }
+                    onAdjustmentChange = {
+                        workingAdjustment = it
+                        onApplyAdjustment(it)
+                    }
                 )
                 AdjustCategoryTab.CURVES -> CurvesTab(
                     adjustment = workingAdjustment,
-                    onAdjustmentChange = { workingAdjustment = it }
+                    onAdjustmentChange = {
+                        workingAdjustment = it
+                        onApplyAdjustment(it)
+                    }
                 )
                 AdjustCategoryTab.LUT -> LutTab(
                     adjustment = workingAdjustment,
-                    onAdjustmentChange = { workingAdjustment = it }
+                    onAdjustmentChange = {
+                        workingAdjustment = it
+                        onApplyAdjustment(it)
+                    }
                 )
             }
         }
@@ -224,7 +239,11 @@ fun AdjustScreen(
             Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
-                    .clickable { workingAdjustment = ColorAdjustment() }
+                    .clickable {
+                        val reset = ColorAdjustment()
+                        workingAdjustment = reset
+                        onApplyAdjustment(reset)
+                    }
                     .padding(horizontal = 8.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {

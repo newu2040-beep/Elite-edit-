@@ -58,7 +58,7 @@ class MainActivity : ComponentActivity() {
 
         val db = EliteEditDatabase.getInstance(applicationContext)
         repository = ProjectRepository(db.projectDao(), applicationContext)
-        editorViewModel = EditorViewModel(repository)
+        editorViewModel = EditorViewModel(repository, applicationContext)
 
         setContent {
             EliteEditTheme {
@@ -112,7 +112,6 @@ fun EliteEditApp(
                 OnboardingScreen(
                     onStartEditing = {
                         currentDestination = AppDestination.Home
-                        showPermissionDialog = true
                     }
                 )
             }
@@ -123,7 +122,6 @@ fun EliteEditApp(
                         currentDestination = AppDestination.Editor(projectId)
                     },
                     onNewProject = {
-                        showPermissionDialog = true
                         currentDestination = AppDestination.ImportMedia
                     },
                     onDuplicateProject = { id ->
@@ -154,12 +152,13 @@ fun EliteEditApp(
                 BackHandler { currentDestination = AppDestination.Home }
                 MediaImportSheet(
                     onImportMedia = { clips ->
+                        val firstClip = clips.firstOrNull()
                         val newProj = Project(
                             id = UUID.randomUUID().toString(),
                             name = "Project ${allProjects.size + 1}",
                             aspectRatio = CanvasAspectRatio.RATIO_9_16,
                             clips = clips,
-                            previewDrawableResId = clips.firstOrNull()?.thumbnailResId
+                            thumbnailPath = firstClip?.thumbnailPath ?: firstClip?.uri
                         )
                         scope.launch {
                             repository.saveProject(newProj)

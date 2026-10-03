@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -176,9 +177,11 @@ fun EditorScreen(
                 currentPositionMs = state.currentPositionMs,
                 isPlaying = state.isPlaying,
                 showBeforeAfter = state.showBeforeAfter,
+                exoPlayer = viewModel.playbackController.getPlayer(),
                 onTogglePlayPause = { viewModel.togglePlayPause() },
                 onSelectTextLayer = { viewModel.selectTextLayer(it) },
                 onSelectStickerLayer = { },
+                onAddClipClicked = { viewModel.openSheet(EditorActiveSheet.IMPORT_MEDIA) },
                 modifier = Modifier.weight(1f)
             )
 
@@ -213,7 +216,8 @@ fun EditorScreen(
         AnimatedVisibility(
             visible = state.activeSheet == EditorActiveSheet.ADJUST,
             enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
-            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
+            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+            modifier = Modifier.align(Alignment.BottomCenter)
         ) {
             val activeClip = state.project.clips.getOrNull(state.selectedClipIndex)
             AdjustScreen(
@@ -221,7 +225,8 @@ fun EditorScreen(
                 showBeforeAfter = state.showBeforeAfter,
                 onToggleBeforeAfter = { viewModel.toggleBeforeAfter() },
                 onApplyAdjustment = { viewModel.updateColorAdjustment(it) },
-                onClose = { viewModel.closeSheet() }
+                onClose = { viewModel.closeSheet() },
+                modifier = Modifier.height(380.dp)
             )
         }
 
@@ -261,6 +266,7 @@ fun EditorScreen(
             exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
         ) {
             AudioSheet(
+                activeClip = state.project.clips.getOrNull(state.selectedClipIndex),
                 onAddAudio = { viewModel.addAudioClip(it) },
                 onClose = { viewModel.closeSheet() }
             )
@@ -288,6 +294,22 @@ fun EditorScreen(
                 onStartExport = { settings ->
                     viewModel.closeSheet()
                     viewModel.startExport(settings)
+                },
+                onClose = { viewModel.closeSheet() }
+            )
+        }
+
+        AnimatedVisibility(
+            visible = state.activeSheet == EditorActiveSheet.IMPORT_MEDIA,
+            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
+        ) {
+            com.example.ui.home.MediaImportSheet(
+                onImportMedia = { clips ->
+                    clips.forEach { clip ->
+                        viewModel.addClip(clip)
+                    }
+                    viewModel.closeSheet()
                 },
                 onClose = { viewModel.closeSheet() }
             )

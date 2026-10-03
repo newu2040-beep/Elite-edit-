@@ -1,5 +1,6 @@
 package com.example.ui.editor
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.database.ProjectRepository
@@ -27,6 +28,7 @@ import com.example.domain.command.UpdateColorAdjustmentCommand
 import com.example.domain.command.UpdateTextCommand
 import com.example.media.engine.ExportEngine
 import com.example.media.engine.ExportState
+import com.example.media.engine.PlaybackController
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -44,12 +46,13 @@ enum class EditorActiveSheet {
     FONTS,
     EXPORT,
     CANVAS_SETTINGS,
-    SPEED
+    SPEED,
+    IMPORT_MEDIA
 }
 
 data class EditorUiState(
     val project: Project = Project(),
-    val currentPositionMs: Long = 8000L,
+    val currentPositionMs: Long = 0L,
     val isPlaying: Boolean = false,
     val selectedClipIndex: Int = 0,
     val selectedTextLayerId: String? = null,
@@ -65,8 +68,11 @@ data class EditorUiState(
 )
 
 class EditorViewModel(
-    private val repository: ProjectRepository
+    private val repository: ProjectRepository,
+    private val context: Context
 ) : ViewModel() {
+
+    val playbackController = PlaybackController(context.applicationContext)
 
     private val _uiState = MutableStateFlow(EditorUiState())
     val uiState: StateFlow<EditorUiState> = _uiState.asStateFlow()
@@ -75,6 +81,19 @@ class EditorViewModel(
     private var autosaveJob: Job? = null
     private var exportJob: Job? = null
 
+    init {
+        viewModelScope.launch {
+            playbackController.isPlaying.collect { playing ->
+                _uiState.update { it.copy(isPlaying = playing) }
+            }
+        }
+        viewModelScope.launch {
+            playbackController.currentPositionMs.collect { pos ->
+                _uiState.update { it.copy(currentPositionMs = pos) }
+            }
+        }
+    }
+
     fun loadProject(projectId: String) {
         viewModelScope.launch {
             val project = repository.getProject(projectId) ?: Project(id = projectId)
@@ -82,24 +101,41 @@ class EditorViewModel(
                 it.copy(
                     project = project,
                     selectedClipIndex = if (project.clips.isNotEmpty()) 0 else -1,
+                    currentPositionMs = 0L,
                     canUndo = commandHistory.canUndo,
                     canRedo = commandHistory.canRedo
                 )
             }
+            playbackController.syncProject(project)
         }
     }
 
     fun seekTo(positionMs: Long) {
-        val total = _uiState.value.project.totalDurationMs
-        _uiState.update { it.copy(currentPositionMs = positionMs.coerceIn(0L, total)) }
+        val project = _uiState.value.project
+        val total = project.totalDurationMs
+        val clamped = positionMs.coerceIn(0L, total)
+        _uiState.update { it.copy(currentPositionMs = clamped) }
+        playbackController.seekTo(clamped, project)
+        project.getActiveClipInfo(clamped)?.let { info ->
+            _uiState.update { it.copy(selectedClipIndex = info.clipIndex) }
+        }
     }
 
     fun togglePlayPause() {
-        _uiState.update { it.copy(isPlaying = !it.isPlaying) }
+        playbackController.togglePlayPause(_uiState.value.project)
     }
 
     fun selectClip(index: Int) {
-        _uiState.update { it.copy(selectedClipIndex = index) }
+        val project = _uiState.value.project
+        val clips = project.clips
+        if (index in clips.indices) {
+            _uiState.update { it.copy(selectedClipIndex = index) }
+            var startMs = 0L
+            for (i in 0 until index) {
+                startMs += clips[i].effectiveDurationMs
+            }
+            seekTo(startMs)
+        }
     }
 
     fun openSheet(sheet: EditorActiveSheet) {
@@ -296,6 +332,7 @@ class EditorViewModel(
                 canRedo = commandHistory.canRedo
             )
         }
+        playbackController.syncProject(project)
         // Debounced autosave
         autosaveJob?.cancel()
         autosaveJob = viewModelScope.launch {
@@ -308,7 +345,7 @@ class EditorViewModel(
     fun startExport(settings: ExportSettings) {
         exportJob?.cancel()
         exportJob = viewModelScope.launch {
-            ExportEngine.exportProject(_uiState.value.project, settings).collect { state ->
+            ExportEngine.exportProject(context, _uiState.value.project, settings).collect { state ->
                 _uiState.update { it.copy(exportState = state) }
             }
         }
@@ -322,5 +359,10 @@ class EditorViewModel(
 
     fun resetExportState() {
         _uiState.update { it.copy(exportState = ExportState.Idle) }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        playbackController.release()
     }
 }

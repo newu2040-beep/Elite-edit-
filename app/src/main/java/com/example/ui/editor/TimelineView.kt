@@ -33,7 +33,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import coil.compose.rememberAsyncImagePainter
+import coil.request.ImageRequest
+import java.io.File
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
@@ -200,26 +204,44 @@ private fun ClipItemView(
             .clickable { onClick() }
     ) {
         // Thumbnail strip
-        val thumbRes = clip.thumbnailResId ?: R.drawable.img_city_vibes
+        val context = LocalContext.current
+        val thumbFile = clip.thumbnailPath?.let { File(it) } ?: File(clip.uri)
+        val imageModel = if (thumbFile.exists()) thumbFile else (clip.thumbnailResId ?: R.drawable.img_app_icon)
         Image(
-            painter = painterResource(id = thumbRes),
+            painter = rememberAsyncImagePainter(
+                model = ImageRequest.Builder(context)
+                    .data(imageModel)
+                    .crossfade(true)
+                    .build()
+            ),
             contentDescription = clip.name,
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Crop
         )
 
         // Clip label
-        Text(
-            text = clip.name,
-            color = EliteTextPrimary,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.SemiBold,
+        Row(
             modifier = Modifier
                 .align(Alignment.BottomStart)
-                .background(Color.Black.copy(alpha = 0.6f))
+                .background(Color.Black.copy(alpha = 0.7f))
                 .padding(horizontal = 4.dp, vertical = 2.dp),
-            maxLines = 1
-        )
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = if (clip.isVideo) "VIDEO" else "PHOTO",
+                color = if (clip.isVideo) Color(0xFF6C8CFF) else Color(0xFF00D26A),
+                fontSize = 8.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.width(3.dp))
+            Text(
+                text = clip.name,
+                color = EliteTextPrimary,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1
+            )
+        }
 
         // Trim handles if selected
         if (isSelected) {

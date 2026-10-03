@@ -44,11 +44,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.rememberAsyncImagePainter
+import coil.request.ImageRequest
+import java.io.File
 import com.example.R
 import com.example.data.model.Project
 import com.example.ui.icons.EliteIcons
@@ -146,23 +151,75 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // 2x2 Grid of Project Cards (Matches Mockup 3)
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-                contentPadding = PaddingValues(bottom = 80.dp)
-            ) {
-                items(projects) { project ->
-                    ProjectCardItem(
-                        project = project,
-                        onOpen = { onOpenProject(project.id) },
-                        onDuplicate = { onDuplicateProject(project.id) },
-                        onDelete = { onDeleteProject(project.id) }
-                    )
+            if (projects.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .padding(24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(64.dp)
+                                .clip(CircleShape)
+                                .background(ElitePrimary.copy(alpha = 0.15f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = "New Project",
+                                tint = ElitePrimaryLight,
+                                modifier = Modifier.size(30.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "No Projects Yet",
+                            color = EliteTextPrimary,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "Import video clips and photos from your device to start creating.",
+                            color = EliteTextSecondary,
+                            fontSize = 13.sp,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Button(
+                            onClick = onNewProject,
+                            colors = ButtonDefaults.buttonColors(containerColor = ElitePrimary),
+                            shape = RoundedCornerShape(20.dp)
+                        ) {
+                            Text("Import Media & Start", color = Color.White)
+                        }
+                    }
+                }
+            } else {
+                // 2x2 Grid of Project Cards (Matches Mockup 3)
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                    contentPadding = PaddingValues(bottom = 80.dp)
+                ) {
+                    items(projects) { project ->
+                        ProjectCardItem(
+                            project = project,
+                            onOpen = { onOpenProject(project.id) },
+                            onDuplicate = { onDuplicateProject(project.id) },
+                            onDelete = { onDeleteProject(project.id) }
+                        )
+                    }
                 }
             }
         }
@@ -253,9 +310,24 @@ private fun ProjectCardItem(
                 .aspectRatio(1f)
                 .clip(RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp))
         ) {
-            val previewRes = project.previewDrawableResId ?: R.drawable.img_city_vibes
+            val context = LocalContext.current
+            val thumbPath = project.thumbnailPath ?: project.clips.firstOrNull()?.thumbnailPath
+            val thumbFile = thumbPath?.let { File(it) }
+            val imageModel: Any = if (thumbFile != null && thumbFile.exists()) {
+                thumbFile
+            } else if (project.clips.isNotEmpty() && File(project.clips[0].uri).exists()) {
+                File(project.clips[0].uri)
+            } else {
+                R.drawable.ic_app_icon_circle
+            }
+
             Image(
-                painter = painterResource(id = previewRes),
+                painter = rememberAsyncImagePainter(
+                    model = ImageRequest.Builder(context)
+                        .data(imageModel)
+                        .crossfade(true)
+                        .build()
+                ),
                 contentDescription = project.name,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop
